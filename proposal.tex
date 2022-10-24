@@ -1,0 +1,110 @@
+\documentclass{article}
+\usepackage{aaryan345h}
+
+\assgnauthor{Aaryan Prakash}
+\assgnclass{CS 345H}
+\assgntitle{Project Proposal}
+
+\begin{document}
+  My project is to implement an interpreter for a simple language 
+    that allows sharing values between threads safely using a type system.
+  I will be working alone on this project.
+  This type system is based on the type system described 
+    in the paper ``A Flexible Type System for Fearless Concurrency,''
+    which proposes a type system that ensures data races cannot occur
+    while being more flexible than Rust's type system.
+
+  In the paper,
+    to coordinate access between different threads,
+    each thread has some reservation of objects that it can reach.
+  The objects itself are represented by a graph of connections.
+  A dominating object is one that is on all paths 
+    from the root object to all objects reachable from the dominating object.
+  If we send the dominating object to another thread,
+    then just marking the dominating object as an invalid reference
+    is enough to mark the rest of the objects in the subgraph as invalid.
+
+  The steps that I have planned for this project:
+  \begin{enumerate}
+    \item Implement a basic type system checker
+    
+      I have not implemented an interpreter with static type checking,
+        so implementing a basic one would be useful
+        before building a more complex one.
+      This would likely be a C-like type system without implicit conversions.
+      Essentially,
+        each variable has some type,
+        and each function call only accepts a certain set of types
+        and returns a specific type.
+      Types cannot be casted from one type to another implicitly.
+
+      Expected time: 1.5 weeks
+
+    \item Implement global domination invariant
+
+      Certain variables are marked as \verb+iso+,
+        which means that they must contain a dominating reference.
+      The global domination invariant is that this is required,
+        in contrast to the tempered domination invariant described later.
+
+      Expected time: 2.5 weeks
+
+    \item Implement tempered domination invariant 
+
+      This loosens the requirement that a variable marked as \verb+iso+
+        must hold a dominating reference at all times.
+      Instead,
+        the type system can violate this invariant in certain places
+        that are tracked by the type system.
+      The decision for which references can violate the invariant
+        will initially be marked by hand.
+      
+      Expected time: 2.5 weeks
+
+    \item Create an interpreter for a language using the type system
+    
+      This interpreter would first run static type checking.
+      Once verifying that the types match,
+        the interpreter can execute the code.
+      The language will be likely be simple,
+        with just support for basic types, structs, and functions.
+      There would also be some support for basic multithreading,
+        similar to how Go uses goroutines for concurrency.
+
+      Expected time: 1.5 weeks
+  \end{enumerate}
+
+  Implementing the type system may be a lot of work,
+    especially since the paper mentions that their type checking system
+    consists 4,100 lines of OCaml.
+  In the case when this is too complex to implement,
+    I would probably implement a restricted subset of the type system
+    or another related type system.
+  For example,
+    the paper ``Types for Immutability and Aliasing Control''
+    describes another type system for sharing values between threads.
+  This type system is more restricted than the other type system,
+    so it may be easier to implement.
+
+  Another alternative would be to just implement the tempered domination invariant
+    without the other additional features brought up in the paper.
+  This would be unable to handle certain cases,
+    but it would be easier to implement.
+  For instance,
+    the \verb+if disconnected+ statement is a runtime check
+    that also signals information to the type checker.
+  Another feature that the paper has
+    is that the references that are tracked for tempered domination
+    are inferred from the function arguments.
+  For these features,
+    I will implement the base type checking system first
+    and then implement these features.
+
+  References:
+
+  ``A Flexible Type System for Fearless Concurrency,'' ---
+  https://www.cs.cornell.edu/andru/papers/gallifrey-types/gallifrey-types.pdf
+
+ ``Types for Immutability and Aliasing Control'' ---
+ http://ceur-ws.org/Vol-1720/full5.pdf
+\end{document}

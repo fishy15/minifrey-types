@@ -1,0 +1,25 @@
+\NeedsTeXFormat{LaTeX2e}[2020/10/01]
+\ProvidesPackage{aaryan362k}[2022/09/29 1.0.1 CS 345H Template]
+
+\RequirePackage[utf8]{inputenc}
+\RequirePackage{amsmath}
+\RequirePackage{amssymb}
+\RequirePackage{amsthm}
+\RequirePackage{fancyhdr}
+\RequirePackage{mathdots}
+\RequirePackage{mathtools}
+\RequirePackage{parskip}
+\RequirePackage[margin=1in]{geometry}
+
+% for setting title
+\newcommand*{\assgnauthor}[1]{\newcommand*{\@assgnauthor}{#1}}
+\newcommand*{\assgntitle}[1]{\newcommand*{\@assgntitle}{#1}}
+\newcommand*{\assgnclass}[1]{\newcommand*{\@assgnclass}{#1}}
+
+\pagestyle{fancy}
+
+\lhead{\@assgnauthor}
+\chead{\@assgnclass}
+\rhead{\@assgntitle}
+
+\endinput
