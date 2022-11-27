@@ -10,7 +10,7 @@ data Type = Int
           | Var String deriving Eq
 
 data Expr = Literal Type 
-          | VarInit 
+          | VarValue String
           | Add Expr Expr 
           | Apply Expr Expr deriving Eq
 
