@@ -4,7 +4,7 @@ import qualified Data.Set as Set
 -- Single variables
 
 data RefType = Iso | Tracking | Regular deriving Eq
-data Type = Type String
+data Type = Type String deriving (Eq, Ord)
 
 data RefInfo = RefInfo { refOf :: RefType, typeOf :: Type, regionOf :: Region }
 
@@ -82,6 +82,14 @@ addRegTracked r (State vs rc ir tr si fr) = State vs rc ir (Set.insert r tr) si 
 getFields :: Type -> State -> Maybe [(RefType, Type)]
 getFields (Type name) state = Map.lookup name (structInfo state)
 
+-- given the region something lives in and its type,
+-- finds the RefInfo for each of the fields
+getFieldRefInfo :: Region -> Type -> State -> Maybe [RefInfo]
+getFieldRefInfo reg t s = do
+    fields <- getFields t s
+    regions <- Map.lookup (reg, t) (fieldRegs s)
+    return (zipWith (\(rt, t) r -> RefInfo rt t r) fields regions)
+
 -- adds a struct to a given region
 -- allocates a new region to each iso field of that struct,
 -- but reuses the same region for regular fields of the struct
@@ -135,7 +143,7 @@ getType (VarAccess name) state = do
 getType (FieldAccess name idx) state = do 
     varRef <- getVar name state
     let (Type name) = typeOf varRef
-    fields <- Map.lookup name (structInfo state)
+    fields <- getFieldRefInfo (regionOf varRef) (typeOf varRef) state
     accessField fields idx state
     where accessField :: [RefInfo] -> Int -> State -> Maybe (RefInfo, State)
           accessField [] _ _ = Nothing
