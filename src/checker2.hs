@@ -11,12 +11,14 @@ data Var = Var { varName :: String, varInfo :: RefInfo }
 
 -- Expressions
 
-data Expression = Constant
+data Expression = New
                 | VarAccess String
                 | FieldAccess String Int
                 | AssignVar String RefType Expression
                 | AssignField String Int Expression
                 | Seq Expression Expression
+
+data Function = Function { funcParams :: [(String, Type)], funcBody :: Expression }
 
 -- Regions
 newtype Region = Region Int deriving (Eq, Ord)
@@ -28,6 +30,9 @@ data State = State {
     isoRegions :: (Set.Set Region),
     trackedRegions :: (Set.Set Region)
 }
+
+emptyState :: State
+emptyState = State [] 0 Set.empty Set.empty
 
 allocRegion :: State -> (State, Region)
 allocRegion (State vars regionCount is ts) = (State vars (regionCount + 1) is ts, Region regionCount)
@@ -61,10 +66,29 @@ addRegTracked r (State vs rc ir tr) = State vs rc ir (Set.insert r tr)
 
 -- Checking
 
+checkFunction :: Function -> Bool
+
+checkFunction (Function params body) = distinctNames && validBody
+    where distinctNames = distinctNames' params
+          distinctNames' :: [(String, Type)] -> Bool
+          distinctNames' [] = True
+          distinctNames' ((name, _):ps) = null (filter (\(n, _) -> n == name) ps) && distinctNames' ps
+
+          initState = makeState params emptyState
+          makeState :: [(String, Type)] -> State -> State
+          makeState [] s = s
+          makeState ((name, t):ps) s = makeState ps (addVar name (RefInfo Iso t reg) s')
+            where (s', reg) = allocRegion s
+
+          validBody = case (getType body initState) of
+            Just _ -> True
+            Nothing -> False
+
 getType :: Expression -> State -> Maybe (RefInfo, State)
 
-getType Constant s = Just ((RefInfo Regular Value region'), state')
-    where (state', region') = allocRegion s
+-- just gives Value to construct a value since types are not being checked
+getType New s = Just ((RefInfo Iso Value region), state)
+    where (state, region) = allocRegion s
 
 getType (VarAccess name) state = do
     var <- getVar name state
