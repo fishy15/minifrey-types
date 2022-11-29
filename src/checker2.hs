@@ -4,14 +4,14 @@ import qualified Data.Set as Set
 -- Single variables
 
 data RefType = Iso | Tracking | Regular deriving Eq
-data Type = Value | StructPtr [RefInfo]
+data Type = Type String
 
 data RefInfo = RefInfo { refOf :: RefType, typeOf :: Type, regionOf :: Region }
 data Var = Var { varName :: String, varInfo :: RefInfo }
 
 -- Expressions
 
-data Expression = New
+data Expression = New Type
                 | VarAccess String
                 | FieldAccess String Int
                 | AssignVar String RefType Expression
@@ -24,57 +24,97 @@ data Function = Function { funcParams :: [(String, Type)], funcBody :: Expressio
 newtype Region = Region Int deriving (Eq, Ord)
 
 --- Type state
+
+type StructInfo = Map.Map String [(RefType, Type)] 
+
 data State = State { 
     stateVars :: [Var],
     regionCount :: Int,
-    isoRegions :: (Set.Set Region),
-    trackedRegions :: (Set.Set Region)
+    isoRegions :: Set.Set Region,
+    trackedRegions :: Set.Set Region,
+    structInfo :: StructInfo,
+    fieldRegs :: Map.Map (Region, Type) [Region]
 }
 
-emptyState :: State
-emptyState = State [] 0 Set.empty Set.empty
+emptyState :: StructInfo -> State
+emptyState si = State [] 0 Set.empty Set.empty si Map.empty
 
+-- allocates a previously unused state
 allocRegion :: State -> (State, Region)
-allocRegion (State vars regionCount is ts) = (State vars (regionCount + 1) is ts, Region regionCount)
+allocRegion (State vars regionCount is ts si fr) = (State vars (regionCount + 1) is ts si fr, Region regionCount)
 
+-- gets information about the variable with the given name
+-- if no such variable, returns Nothing
 getVar :: String -> State -> Maybe Var
-getVar name (State vs _ _ _) = getVar' name vs
+getVar name state = getVar' name (stateVars state)
     where getVar' :: String -> [Var] -> Maybe Var
           getVar' _ [] = Nothing
           getVar' name (v:vs) = if varName v == name then Just v else getVar' name vs
 
+-- adds a variable to the current context
 addVar :: String -> RefInfo -> State -> State
-addVar name value (State vars rc ir tr) = State newVars rc ir tr
+addVar name value (State vars rc ir tr si fr) = State newVars rc ir tr si fr
     where newVars = ((Var name value):newVars)
 
+-- removes a variable from the current context
+-- currently, always fails
 releaseVar :: String -> State -> Maybe State
 releaseVar name state = case getVar name state of
     Just _ -> Nothing
     Nothing -> Just state
 
+-- checks if the given region has an iso pointer to it
 isRegIso :: Region -> State -> Bool
-isRegIso r (State _ _ ir _) = Set.member r ir
+isRegIso r state = Set.member r (isoRegions state)
 
+-- marks that the given region has an iso pointer to it
+-- assumes that there was no such pointer earlier
 addRegIso :: Region -> State -> State
-addRegIso r (State vs rc ir tr) = State vs rc (Set.insert r ir) tr
+addRegIso r (State vs rc ir tr si fr) = State vs rc (Set.insert r ir) tr si fr
 
+-- checks if the given region is being tracked
 isRegTracked :: Region -> State -> Bool
-isRegTracked r (State _ _ _ tr) = Set.member r tr
+isRegTracked r state = Set.member r (trackedRegions state)
 
+-- marks that the given region is being tracked
+-- assumes that there was no such pointer earlier
 addRegTracked :: Region -> State -> State
-addRegTracked r (State vs rc ir tr) = State vs rc ir (Set.insert r tr)
+addRegTracked r (State vs rc ir tr si fr) = State vs rc ir (Set.insert r tr) si fr
+
+-- given a type, gets the fields of the type based on the struct context
+-- returns nothing if no struct with that name exists
+getFields :: Type -> State -> Maybe [(RefType, Type)]
+getFields (Type name) state = Map.lookup name (structInfo state)
+
+-- adds a struct to a given region
+-- allocates a new region to each iso field of that struct,
+-- but reuses the same region for regular fields of the struct
+addStruct :: Region -> Type -> State -> Maybe State
+addStruct reg t state  = do
+    fields <- getFields t state
+    let ((State vs rc ir tr si fr), fieldRegs) = allocRegsForFields fields reg state
+    return (State vs rc ir tr si (added fieldRegs fr)) 
+    where added regs fr = Map.insert (reg, t) regs fr
+
+          allocRegsForFields :: [(RefType, Type)] -> Region -> State -> (State, [Region])
+          allocRegsForFields [] _ s = (s, [])
+          allocRegsForFields ((rt, t):fs) orig s
+            | rt == Regular = (s', (orig:rest))
+            | otherwise = (sAlloc, (reg:rest))
+            where (s', rest) = allocRegsForFields fs orig s
+                  (sAlloc, reg) = allocRegion s'
 
 -- Checking
 
-checkFunction :: Function -> Bool
+checkFunction :: Function -> StructInfo -> Bool
 
-checkFunction (Function params body) = distinctNames && validBody
+checkFunction (Function params body) si = distinctNames && validBody
     where distinctNames = distinctNames' params
           distinctNames' :: [(String, Type)] -> Bool
           distinctNames' [] = True
           distinctNames' ((name, _):ps) = null (filter (\(n, _) -> n == name) ps) && distinctNames' ps
 
-          initState = makeState params emptyState
+          initState = makeState params (emptyState si)
           makeState :: [(String, Type)] -> State -> State
           makeState [] s = s
           makeState ((name, t):ps) s = makeState ps (addVar name (RefInfo Iso t reg) s')
@@ -87,8 +127,10 @@ checkFunction (Function params body) = distinctNames && validBody
 getType :: Expression -> State -> Maybe (RefInfo, State)
 
 -- just gives Value to construct a value since types are not being checked
-getType New s = Just ((RefInfo Iso Value region), state)
-    where (state, region) = allocRegion s
+getType (New t) s = do 
+    let (state, region) = allocRegion s
+    state' <- addStruct region t state
+    return ((RefInfo Iso t region), state')
 
 getType (VarAccess name) state = do
     var <- getVar name state
@@ -96,9 +138,9 @@ getType (VarAccess name) state = do
 
 getType (FieldAccess name idx) state = do 
     var <- getVar name state
-    case typeOf (varInfo var) of
-        Value -> Nothing
-        StructPtr fields -> accessField fields idx state
+    let (Type name) = typeOf (varInfo var)
+    fields <- Map.lookup name (structInfo state)
+    accessField fields idx state
     where accessField :: [RefInfo] -> Int -> State -> Maybe (RefInfo, State)
           accessField [] _ _ = Nothing
           accessField (f:_) 0 s = Just (f, s) 
@@ -152,18 +194,18 @@ getType (Seq expr1 expr2) state = do
 --- Helper functions
 
 -- Takes a RefInfo and produces another reference to it
-createNewRef :: RefInfo -> State -> Maybe (RefInfo, State)
+-- createNewRef :: RefInfo -> State -> Maybe (RefInfo, State)
 
 -- if the reference is currently being tracked, then we cannot make another reference
 -- otherwise, we make add the region to the tracking set and return a reference
-createNewRef (RefInfo Iso t r) (State vs rc isIso isTracked)
-    = if Set.member r isTracked 
-        then Nothing 
-        else Just ((RefInfo Tracking t r), (State vs rc isIso isTracked'))
-    where isTracked' = Set.insert r isTracked
+-- createNewRef (RefInfo Iso t r) (State vs rc isIso isTracked si)
+--     = if Set.member r isTracked 
+--         then Nothing 
+--         else Just ((RefInfo Tracking t r), (State vs rc isIso isTracked' si))
+--     where isTracked' = Set.insert r isTracked
 
 -- cannot have a tracking in a struct field
-createNewRef (RefInfo Tracking t r) s = Nothing
+-- createNewRef (RefInfo Tracking t r) s = Nothing
 
 -- just returns a direct reference in the same region
-createNewRef (RefInfo Regular t r) s = Just ((RefInfo Regular t r), s)
+-- createNewRef (RefInfo Regular t r) s = Just ((RefInfo Regular t r), s)
