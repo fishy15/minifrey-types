@@ -17,7 +17,6 @@ data Expression = Constant
                 | AssignVar String RefType Expression
                 | AssignField String Int Expression
                 | Seq Expression Expression
-                | Skip
 
 -- Regions
 newtype Region = Region Int deriving (Eq, Ord)
@@ -120,6 +119,11 @@ getType (AssignVar name Regular expr) state = do
                 else Nothing
         -- create a new variable
         Nothing -> Just (value, addVar name value state)
+
+getType (Seq expr1 expr2) state = do
+    -- just lose the value of the first expression
+    (_, state) <- getType expr1 state
+    getType expr2 state
 
 --- Helper functions
 
