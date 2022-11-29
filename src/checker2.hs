@@ -93,20 +93,20 @@ getFieldRefInfo reg t s = do
 -- adds a struct to a given region
 -- allocates a new region to each iso field of that struct,
 -- but reuses the same region for regular fields of the struct
-addStruct :: Region -> Type -> State -> Maybe State
-addStruct reg t state  = do
-    fields <- getFields t state
-    let ((State vs rc ir tr si fr), fieldRegs) = allocRegsForFields fields reg state
-    return (State vs rc ir tr si (added fieldRegs fr)) 
-    where added regs fr = Map.insert (reg, t) regs fr
+addStructToRegion :: Region -> Type -> State -> Maybe State
+addStructToRegion reg t s = do
+    fields <- getFields t s
+    let (s', regList) = allocRegsForFields fields reg s
+    let addedToFieldRegs = Map.insert (reg, t) regList (fieldRegs s')
+    return (s' { fieldRegs = addedToFieldRegs })
 
-          allocRegsForFields :: [(RefType, Type)] -> Region -> State -> (State, [Region])
-          allocRegsForFields [] _ s = (s, [])
-          allocRegsForFields ((rt, t):fs) orig s
-            | rt == Regular = (s', (orig:rest))
-            | otherwise = (sAlloc, (reg:rest))
-            where (s', rest) = allocRegsForFields fs orig s
-                  (sAlloc, reg) = allocRegion s'
+allocRegsForFields :: [(RefType, Type)] -> Region -> State -> (State, [Region])
+allocRegsForFields [] _ s = (s, [])
+allocRegsForFields ((rt, t):fs) orig s
+    | rt == Regular = (s', (orig:rest))
+    | otherwise     = (sAlloc, (reg:rest))
+    where (s', rest)    = allocRegsForFields fs orig s
+          (sAlloc, reg) = allocRegion s'
 
 -- Checking
 
@@ -133,7 +133,7 @@ getType :: Expression -> State -> Maybe (RefInfo, State)
 -- just gives Value to construct a value since types are not being checked
 getType (New t) s = do 
     let (state, region) = allocRegion s
-    state' <- addStruct region t state
+    state' <- addStructToRegion region t state
     return ((RefInfo Iso t region), state')
 
 getType (VarAccess name) state = do
@@ -143,8 +143,15 @@ getType (VarAccess name) state = do
 getType (FieldAccess name idx) state = do 
     varRef <- getVar name state
     let (Type name) = typeOf varRef
-    fields <- getFieldRefInfo (regionOf varRef) (typeOf varRef) state
-    accessField fields idx state
+    case (getFieldRefInfo (regionOf varRef) (typeOf varRef) state) of
+        -- this type has already been allocated in the context
+        Just fields -> accessField fields idx state
+        -- we need to allocate a new version in the context
+        Nothing -> do
+            allocState <- addStructToRegion (regionOf varRef) (typeOf varRef) state
+            -- below line should not fail if we have added successfully
+            fields <- getFieldRefInfo (regionOf varRef) (typeOf varRef) allocState
+            accessField fields idx allocState
     where accessField :: [RefInfo] -> Int -> State -> Maybe (RefInfo, State)
           accessField [] _ _ = Nothing
           accessField (f:_) 0 s = Just (f, s) 
