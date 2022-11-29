@@ -7,7 +7,6 @@ data RefType = Iso | Tracking | Regular deriving Eq
 data Type = Type String
 
 data RefInfo = RefInfo { refOf :: RefType, typeOf :: Type, regionOf :: Region }
-data Var = Var { varName :: String, varInfo :: RefInfo }
 
 -- Expressions
 
@@ -28,7 +27,7 @@ newtype Region = Region Int deriving (Eq, Ord)
 type StructInfo = Map.Map String [(RefType, Type)] 
 
 data State = State { 
-    stateVars :: [Var],
+    stateVars :: Map.Map String RefInfo,
     regionCount :: Int,
     isoRegions :: Set.Set Region,
     trackedRegions :: Set.Set Region,
@@ -37,7 +36,7 @@ data State = State {
 }
 
 emptyState :: StructInfo -> State
-emptyState si = State [] 0 Set.empty Set.empty si Map.empty
+emptyState si = State Map.empty 0 Set.empty Set.empty si Map.empty
 
 -- allocates a previously unused state
 allocRegion :: State -> (State, Region)
@@ -45,16 +44,13 @@ allocRegion (State vars regionCount is ts si fr) = (State vars (regionCount + 1)
 
 -- gets information about the variable with the given name
 -- if no such variable, returns Nothing
-getVar :: String -> State -> Maybe Var
-getVar name state = getVar' name (stateVars state)
-    where getVar' :: String -> [Var] -> Maybe Var
-          getVar' _ [] = Nothing
-          getVar' name (v:vs) = if varName v == name then Just v else getVar' name vs
+getVar :: String -> State -> Maybe RefInfo
+getVar name state = Map.lookup name (stateVars state)
 
 -- adds a variable to the current context
 addVar :: String -> RefInfo -> State -> State
 addVar name value (State vars rc ir tr si fr) = State newVars rc ir tr si fr
-    where newVars = ((Var name value):newVars)
+    where newVars = Map.insert name value vars
 
 -- removes a variable from the current context
 -- currently, always fails
@@ -133,12 +129,12 @@ getType (New t) s = do
     return ((RefInfo Iso t region), state')
 
 getType (VarAccess name) state = do
-    var <- getVar name state
-    Just ((varInfo var), state)
+    varRef <- getVar name state
+    Just (varRef, state)
 
 getType (FieldAccess name idx) state = do 
-    var <- getVar name state
-    let (Type name) = typeOf (varInfo var)
+    varRef <- getVar name state
+    let (Type name) = typeOf varRef
     fields <- Map.lookup name (structInfo state)
     accessField fields idx state
     where accessField :: [RefInfo] -> Int -> State -> Maybe (RefInfo, State)
@@ -178,9 +174,9 @@ getType (AssignVar name Regular expr) state = do
     (value, state) <- getType expr state
     case (getVar name state) of
         -- need to replace an already existing variable
-        Just var -> do
+        Just varRef -> do
             released <- releaseVar name state
-            if (regionOf value == regionOf (varInfo var))
+            if (regionOf value == regionOf varRef)
                 then Just (value, addVar name value released)
                 else Nothing
         -- create a new variable
