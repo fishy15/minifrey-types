@@ -49,14 +49,17 @@ getVar name state = Map.lookup name (stateVars state)
 
 -- adds a variable to the current context
 addVar :: String -> RefInfo -> State -> State
-addVar name value (State vars rc ir tr si fr) = State newVars rc ir tr si fr
-    where newVars = Map.insert name value vars
+addVar name value state = state { stateVars = newVars }
+    where newVars = Map.insert name value (stateVars state)
 
 -- removes a variable from the current context
 -- currently, always fails
 releaseVar :: String -> State -> Maybe State
 releaseVar name state = case getVar name state of
-    Just _ -> Nothing
+    Just ri -> Just state { stateVars = removedVar, isoRegions = removedIso, trackedRegions = removedTrack }
+        where removedVar   = Map.delete name (stateVars state)
+              removedIso   = Set.delete (regionOf ri) (isoRegions state)
+              removedTrack = Set.delete (regionOf ri) (trackedRegions state)
     Nothing -> Just state
 
 -- checks if the given region has an iso pointer to it
@@ -66,7 +69,8 @@ isRegIso r state = Set.member r (isoRegions state)
 -- marks that the given region has an iso pointer to it
 -- assumes that there was no such pointer earlier
 addRegIso :: Region -> State -> State
-addRegIso r (State vs rc ir tr si fr) = State vs rc (Set.insert r ir) tr si fr
+addRegIso reg state = state { isoRegions = insertedIso }
+    where insertedIso = Set.insert reg (isoRegions state)
 
 -- checks if the given region is being tracked
 isRegTracked :: Region -> State -> Bool
@@ -75,7 +79,8 @@ isRegTracked r state = Set.member r (trackedRegions state)
 -- marks that the given region is being tracked
 -- assumes that there was no such pointer earlier
 addRegTracked :: Region -> State -> State
-addRegTracked r (State vs rc ir tr si fr) = State vs rc ir (Set.insert r tr) si fr
+addRegTracked reg state = state { trackedRegions = insertedTrack }
+    where insertedTrack = Set.insert reg (trackedRegions state)
 
 -- given a type, gets the fields of the type based on the struct context
 -- returns nothing if no struct with that name exists
