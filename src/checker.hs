@@ -23,9 +23,16 @@ checkFunction (Function params body) si = distinctNames && noTracking && validBo
           makeState ((name, t):ps) s = makeState ps (addVar name (RefInfo Iso t reg) s')
             where (s', reg) = allocRegion s
 
-          validBody = case (getType body initState) of
-            Just _ -> True
+          validBody = case (validBody') of
+            Just cond -> cond
             Nothing -> False
+          validBody' = do
+                (value, state) <- getType body initState
+                initRegs <- mapM (\(n, _) -> fmap regionOf $ getVar n initState) params
+                finalRegs <- mapM (\(n, _) -> fmap regionOf $ getVar n state) params
+                let retReg = regionOf value
+                let retReachable = any (\r -> reachable r retReg state || reachable retReg r state) initRegs
+                return (initRegs == finalRegs && not retReachable)
 
 getType :: Expression -> State -> Maybe (RefInfo, State)
 

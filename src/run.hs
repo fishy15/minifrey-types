@@ -69,18 +69,39 @@ transferTrackItself = checkFunction func si
 -- Function parameter tests
 
 singleParam = checkFunction func si
-    where func = Function [("x", Type ("A"))] body
-          body = AssignVar "y" Tracking (VarAccess "x")
+    where func = Function [("x", Type "A")] body
+          body = Seq (AssignVar "y" Tracking (VarAccess "x")) $
+                     (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
 noParamToIso = checkFunction func si
-    where func = Function [("x", Type ("A"))] body
-          body = AssignVar "y" Iso (VarAccess "x")
+    where func = Function [("x", Type "A")] body
+          body = Seq (AssignVar "y" Iso (VarAccess "x")) $ 
+                     (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
 noDuplicateParams = checkFunction func si
-    where func = Function [("x", Type ("A")), ("x", Type ("A"))] body
+    where func = Function [("x", Type "A"), ("x", Type "A")] body
           body = AssignVar "y" Iso (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+newRegionParam = checkFunction func si
+    where func = Function [("x", Type "A")] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+returnSameRegion = checkFunction func si
+    where func = Function [("x", Type "A")] body
+          body = Seq (AssignVar "y" Tracking (VarAccess "x")) $
+                 Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "x" Iso (VarAccess "y")) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+returnSameAsParam = checkFunction func si
+    where func = Function [("x", Type "A")] body
+          body = VarAccess "x"
           si   = Map.fromList [("A", [])]
 
 -- Field tests
@@ -147,6 +168,9 @@ tests = [
     TestCase "Single Function Parameter" singleParam True,
     TestCase "Parameter Treated as Iso" noParamToIso True,
     TestCase "No Duplicate Parameters" noDuplicateParams False,
+    TestCase "Modify Parameter Region" newRegionParam False,
+    TestCase "Return to Same Parameter Region" returnSameRegion True,
+    TestCase "Return Same Region as a Parameter" returnSameAsParam False,
     TestCase "Access an Iso Struct Field" accessIso True,
     TestCase "Access a Regular Struct Field" accessRegular True,
     TestCase "Access a Regular Struct Field Multiple Times" accessRegularMultiple True,
@@ -158,5 +182,8 @@ tests = [
 
 main :: IO ()
 main = do
-    mapM runTestCase tests 
-    return ()
+    mapM runTestCase tests
+    let passCount = length $ filter (\(TestCase _ actual expected) -> actual == expected) tests
+    let total = length tests
+    putStrLn ""
+    putStrLn $ show passCount ++ "/" ++ show total ++ " passed"

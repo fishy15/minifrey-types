@@ -104,15 +104,15 @@ addStructToRegion reg t s = do
     let (s', regList) = allocRegsForFields fields reg s
     let addedToFieldRegs = Map.insert (reg, t) regList (fieldRegs s')
     return (s' { fieldRegs = addedToFieldRegs })
+    where allocRegsForFields :: [(RefType, Type)] -> Region -> State -> (State, [Region])
+          allocRegsForFields [] _ s = (s, [])
+          allocRegsForFields ((rt, t):fs) orig s
+            | rt == Regular = (s', (orig:rest))
+            | otherwise     = (sAlloc, (reg:rest))
+                where (s', rest)    = allocRegsForFields fs orig s
+                      (sAlloc, reg) = allocRegion s'
 
-allocRegsForFields :: [(RefType, Type)] -> Region -> State -> (State, [Region])
-allocRegsForFields [] _ s = (s, [])
-allocRegsForFields ((rt, t):fs) orig s
-    | rt == Regular = (s', (orig:rest))
-    | otherwise     = (sAlloc, (reg:rest))
-    where (s', rest)    = allocRegsForFields fs orig s
-          (sAlloc, reg) = allocRegion s'
-
+-- replaces the region corresponding to a field with another region
 replaceFieldReg :: Region -> Type -> Int -> Region -> State -> Maybe State
 replaceFieldReg varReg t idx fieldReg s = do
     fields <- getFieldRefInfo varReg t s
@@ -126,3 +126,9 @@ replaceFieldReg varReg t idx fieldReg s = do
           replaceNthReg (r:rs) n new = do
             rest <- replaceNthReg rs (n - 1) new
             return (r:rest) 
+
+-- checks if a path of references exists from first to second register
+reachable :: Region -> Region -> State -> Bool
+reachable a b s = a == b || elem b reachableFromA || any (\r -> reachable r b s) reachableFromA
+    where structsInRegion = filter (\((r, _), _) -> r == a) $ Map.assocs $ fieldRegs s
+          reachableFromA  = concat $ map snd structsInRegion
