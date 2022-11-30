@@ -6,8 +6,8 @@ import State
 -- Program Representation
 
 data Expression = New Type
-                | VarAccess String
-                | FieldAccess String Int
+                | AccessVar String
+                | AccessField String Int
                 | AssignVar String RefType Expression
                 | AssignField String Int Expression
                 | Seq Expression Expression
@@ -56,11 +56,11 @@ getType (New t) s = do
     state' <- addStructToRegion region t state
     return ((RefInfo Iso t region), state')
 
-getType (VarAccess name) state = do
+getType (AccessVar name) state = do
     varRef <- getVar name state
     return (varRef, state)
 
-getType (FieldAccess name idx) state = do 
+getType (AccessField name idx) state = do 
     varRef <- getVar name state
     let (Type name) = typeOf varRef
     case (getFieldRefInfo (regionOf varRef) (typeOf varRef) state) of
