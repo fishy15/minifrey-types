@@ -113,6 +113,20 @@ allocRegsForFields ((rt, t):fs) orig s
     where (s', rest)    = allocRegsForFields fs orig s
           (sAlloc, reg) = allocRegion s'
 
+replaceFieldReg :: Region -> Type -> Int -> Region -> State -> Maybe State
+replaceFieldReg varReg t idx fieldReg s = do
+    fields <- getFieldRefInfo varReg t s
+    let regions = map regionOf fields
+    newRegions <- replaceNthReg regions idx fieldReg
+    let newFieldRegs = Map.insert (varReg, t) newRegions (fieldRegs s)
+    Just s { fieldRegs = newFieldRegs }
+    where replaceNthReg :: [Region] -> Int -> Region -> Maybe [Region]
+          replaceNthReg [] _ _       = Nothing
+          replaceNthReg (r:rs) 0 new = Just (new:rs)
+          replaceNthReg (r:rs) n new = do
+            rest <- replaceNthReg rs (n - 1) new
+            return (r:rest) 
+
 -- Checking
 
 checkFunction :: Function -> StructInfo -> Bool
@@ -150,17 +164,16 @@ getType (FieldAccess name idx) state = do
     let (Type name) = typeOf varRef
     case (getFieldRefInfo (regionOf varRef) (typeOf varRef) state) of
         -- this type has already been allocated in the context
-        Just fields -> accessField fields idx state
+        Just fields -> do
+            value <- accessField fields idx
+            return (value, state)
         -- we need to allocate a new version in the context
         Nothing -> do
             allocState <- addStructToRegion (regionOf varRef) (typeOf varRef) state
             -- below line should not fail if we have added successfully
             fields <- getFieldRefInfo (regionOf varRef) (typeOf varRef) allocState
-            accessField fields idx allocState
-    where accessField :: [RefInfo] -> Int -> State -> Maybe (RefInfo, State)
-          accessField [] _ _ = Nothing
-          accessField (f:_) 0 s = Just (f, s) 
-          accessField (_:fs) n s = accessField fs (n - 1) s
+            value <- accessField fields idx
+            return (value, allocState)
 
 getType (AssignVar name Iso expr) state = do
     (value, state) <- getType expr state
@@ -202,12 +215,32 @@ getType (AssignVar name Regular expr) state = do
         -- create a new variable
         Nothing -> Just (value, addVar name value state)
 
+getType (AssignField name idx expr) state = do
+    (value, state) <- getType expr state
+    varInfo <- getVar name state
+    fields <- getFieldRefInfo (regionOf varInfo) (typeOf varInfo) state
+    fieldOldRef <- accessField fields idx
+    resultState <- if canSet fieldOldRef value
+                then replaceFieldReg (regionOf varInfo) (typeOf varInfo) idx (regionOf value) state
+                else Nothing
+    return (value, resultState)
+
 getType (Seq expr1 expr2) state = do
     -- just lose the value of the first expression
     (_, state) <- getType expr1 state
     getType expr2 state
 
 --- Helper functions
+
+accessField :: [RefInfo] -> Int -> Maybe RefInfo
+accessField [] _ = Nothing
+accessField (f:_) 0 = Just f
+accessField (_:fs) n = accessField fs (n - 1)
+
+canSet :: RefInfo -> RefInfo -> Bool
+canSet old new
+    | refOf old == Regular = (refOf new == Regular) && (regionOf old == regionOf new)
+    | otherwise            = (refOf new == Iso) || (refOf new == Tracking)
 
 -- Takes a RefInfo and produces another reference to it
 -- createNewRef :: RefInfo -> State -> Maybe (RefInfo, State)
