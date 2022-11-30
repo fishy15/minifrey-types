@@ -12,30 +12,76 @@ runTestCase (TestCase name result expected) = putStrLn $ name ++ ": " ++ resultS
 assignIso = checkFunction func si
     where func = Function [] body
           body = AssignVar "x" Iso (New (Type "A"))
-          si = Map.fromList [("A", [])]
+          si   = Map.fromList [("A", [])]
 
 assignRegular = checkFunction func si
     where func = Function [] body
           body = AssignVar "x" Regular (New (Type "A"))
-          si = Map.fromList [("A", [])]
+          si   = Map.fromList [("A", [])]
 
 reassignIso = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A")))
                      (AssignVar "y" Iso (VarAccess "x"))
-          si = Map.fromList [("A", [])]
+          si   = Map.fromList [("A", [])]
 
 assignTracking = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A")))
                      (AssignVar "y" Tracking (VarAccess "x"))
-          si = Map.fromList [("A", [])]
+          si   = Map.fromList [("A", [])]
 
 assignIsoToRegular = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A")))
                      (AssignVar "y" Regular (VarAccess "x"))
-          si = Map.fromList [("A", [])]
+          si   = Map.fromList [("A", [])]
+
+transferIso = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                 (Seq (AssignVar "y" Tracking (VarAccess "x"))
+                 (Seq (AssignVar "x" Iso (New (Type "A")))
+                     ((AssignVar "z" Iso (VarAccess "y")))))
+          si   = Map.fromList [("A", [])]
+
+readdTrack = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                 (Seq (AssignVar "y" Tracking (VarAccess "x"))
+                 (Seq (AssignVar "y" Tracking (New (Type "A")))
+                     ((AssignVar "z" Tracking (VarAccess "x")))))
+          si   = Map.fromList [("A", [])]
+
+transferIsoItself = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                      (AssignVar "x" Iso (VarAccess "x"))
+          si   = Map.fromList [("A", [])]
+
+transferTrackItself = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                 (Seq (AssignVar "y" Tracking (VarAccess "x"))
+                     ((AssignVar "y" Tracking (VarAccess "y"))))
+          si   = Map.fromList [("A", [])]
+
+-- Function parameter tests
+
+singleParam = checkFunction func si
+    where func = Function [("x", Type ("A"))] body
+          body = AssignVar "y" Tracking (VarAccess "x")
+          si   = Map.fromList [("A", [])]
+
+noParamToIso = checkFunction func si
+    where func = Function [("x", Type ("A"))] body
+          body = AssignVar "y" Iso (VarAccess "x")
+          si   = Map.fromList [("A", [])]
+
+noDuplicateParams = checkFunction func si
+    where func = Function [("x", Type ("A")), ("x", Type ("A"))] body
+          body = AssignVar "y" Iso (New (Type "A"))
+          si   = Map.fromList [("A", [])]
 
 tests :: [TestCase]
 tests = [
@@ -43,7 +89,14 @@ tests = [
     TestCase "Assign to Regular" assignRegular False,
     TestCase "Re-assign an Iso to Iso" reassignIso False,
     TestCase "Assign Iso to Tracking" assignTracking True,
-    TestCase "Assign Iso to Regular" assignIsoToRegular False
+    TestCase "Assign Iso to Regular" assignIsoToRegular False,
+    TestCase "Transfer Iso Ownership" transferIso True,
+    TestCase "Transfer Tracking" readdTrack True,
+    TestCase "Transfer Iso Ownership to Itself" transferIsoItself True,
+    TestCase "Transfer Tracking to Itself" transferTrackItself True,
+    TestCase "Single Function Parameter" singleParam True,
+    TestCase "Parameter Treated as Iso" noParamToIso True,
+    TestCase "No Duplicate Parameters" noDuplicateParams False
     ]
 
 main :: IO ()
