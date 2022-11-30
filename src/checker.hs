@@ -1,16 +1,21 @@
 module Checker where
 
+import qualified Data.Map as Map
 import State
 
 -- Checking
 
 checkFunction :: Function -> StructInfo -> Bool
 
-checkFunction (Function params body) si = distinctNames && validBody
+checkFunction (Function params body) si = distinctNames && noTracking && validBody
     where distinctNames = distinctNames' params
           distinctNames' :: [(String, Type)] -> Bool
           distinctNames' [] = True
           distinctNames' ((name, _):ps) = null (filter (\(n, _) -> n == name) ps) && distinctNames' ps
+
+          noTracking :: Bool
+          noTracking = all noTracking' $ Map.elems si
+          noTracking' fields = null $ filter (\(rt, _) -> rt == Tracking) fields
 
           initState = makeState params (emptyState si)
           makeState :: [(String, Type)] -> State -> State

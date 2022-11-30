@@ -83,6 +83,56 @@ noDuplicateParams = checkFunction func si
           body = AssignVar "y" Iso (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
+-- Field tests
+
+accessIso = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                      (AssignVar "y" Tracking (FieldAccess "x" 0))
+          si   = Map.fromList [("A", [(Iso, Type "B")]), ("B", [])]
+
+accessRegular = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                      (AssignVar "y" Regular (FieldAccess "x" 0))
+          si   = Map.fromList [("A", [(Regular, Type "B")]), ("B", [])]
+
+accessRegularMultiple = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                 (Seq (AssignVar "y" Regular (FieldAccess "x" 0))
+                      (AssignVar "z" Regular (FieldAccess "x" 0)))
+          si   = Map.fromList [("A", [(Regular, Type "B")]), ("B", [])]
+
+setIsoField = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A")))
+                      (AssignField "x" 0 (New (Type "B")))
+          si   = Map.fromList [("A", [(Iso, Type "B")]), ("B", [])]
+
+setRegularDiffRegion = checkFunction func si
+    where func = Function [] body
+          body =  Seq (AssignVar "x" Iso (New (Type "A"))) $
+                  Seq (AssignVar "y" Iso (New (Type "A"))) $
+                      (AssignField "y" 0 (FieldAccess "x" 0))
+          si   = Map.fromList [("A", [(Regular, Type "B")]), ("B", [])]
+
+setRegularSameRegion = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "firstB" Regular (FieldAccess "x" 0)) $
+                 Seq (AssignVar "secondB" Regular (FieldAccess "x" 1)) $
+                     (AssignField "firstB" 0 (FieldAccess "secondB" 0))
+          si   = Map.fromList [("A", [(Regular, Type "B"), (Regular, Type "B")]), 
+                               ("B", [(Regular, Type "C")]),
+                               ("C", [])]
+
+noTrackingFields = checkFunction func si
+    where func = Function [] body
+          body = AssignVar "x" Iso (New (Type "A"))
+          si   = Map.fromList [("A", [(Tracking, Type "B")])]
+
+
 tests :: [TestCase]
 tests = [
     TestCase "Assign to Iso" assignIso True,
@@ -96,14 +146,17 @@ tests = [
     TestCase "Transfer Tracking to Itself" transferTrackItself True,
     TestCase "Single Function Parameter" singleParam True,
     TestCase "Parameter Treated as Iso" noParamToIso True,
-    TestCase "No Duplicate Parameters" noDuplicateParams False
+    TestCase "No Duplicate Parameters" noDuplicateParams False,
+    TestCase "Access an Iso Struct Field" accessIso True,
+    TestCase "Access a Regular Struct Field" accessRegular True,
+    TestCase "Access a Regular Struct Field Multiple Times" accessRegularMultiple True,
+    TestCase "Set an Iso Struct Field" setIsoField True,
+    TestCase "Error on Assigning to Different Regular Regions" setRegularDiffRegion False,
+    TestCase "Set on Assigning to the Same Regular Regions" setRegularSameRegion True,
+    TestCase "No Fields with Tracking" noTrackingFields False
     ]
 
 main :: IO ()
 main = do
     mapM runTestCase tests 
     return ()
-
-
-
-    
