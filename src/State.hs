@@ -4,23 +4,10 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 data RefType = Iso | Tracking | Regular deriving (Eq, Show)
-data Type = Type String deriving (Eq, Ord, Show)
+newtype Type = Type String deriving (Eq, Ord, Show)
+newtype Region = Region Int deriving (Eq, Ord, Show)
 
 data RefInfo = RefInfo { refOf :: RefType, typeOf :: Type, regionOf :: Region } deriving Show
-
--- Expressions
-
-data Expression = New Type
-                | VarAccess String
-                | FieldAccess String Int
-                | AssignVar String RefType Expression
-                | AssignField String Int Expression
-                | Seq Expression Expression deriving Show
-
-data Function = Function { funcParams :: [(String, Type)], funcBody :: Expression }
-
--- Regions
-newtype Region = Region Int deriving (Eq, Ord, Show)
 
 --- Type state
 
@@ -32,20 +19,26 @@ data State = State {
     isoRegions :: Set.Set Region,
     trackedRegions :: Set.Set Region,
     structInfo :: StructInfo,
-    fieldRegs :: Map.Map (Region, Type) [Region]
+    fieldRegs :: Map.Map (Region, Type) [Region],
+    sentRegions :: Set.Set Region
 } deriving Show
 
 emptyState :: StructInfo -> State
-emptyState si = State Map.empty 0 Set.empty Set.empty si Map.empty
+emptyState si = State Map.empty 0 Set.empty Set.empty si Map.empty Set.empty
 
 -- allocates a previously unused state
 allocRegion :: State -> (State, Region)
-allocRegion (State vars regionCount is ts si fr) = (State vars (regionCount + 1) is ts si fr, Region regionCount)
+allocRegion state = (state { regionCount = rc + 1 }, Region rc)
+    where rc = regionCount state
 
 -- gets information about the variable with the given name
 -- if no such variable, returns Nothing
 getVar :: String -> State -> Maybe RefInfo
-getVar name state = Map.lookup name (stateVars state)
+getVar name state = do
+    value <- Map.lookup name (stateVars state)
+    if validRegion (regionOf value) state
+        then return value
+        else Nothing
 
 -- adds a variable to the current context
 addVar :: String -> RefInfo -> State -> State
@@ -129,6 +122,14 @@ replaceFieldReg varReg t idx fieldReg s = do
 
 -- checks if a path of references exists from first to second register
 reachable :: Region -> Region -> State -> Bool
-reachable a b s = a == b || elem b reachableFromA || any (\r -> reachable r b s) reachableFromA
+reachable a b s = a == b || any (\r -> reachable r b s) reachableFromA
     where structsInRegion = filter (\((r, _), _) -> r == a) $ Map.assocs $ fieldRegs s
-          reachableFromA  = concat $ map snd structsInRegion
+          reachableFromA  = filter (/= a) $ concat $ map snd structsInRegion
+
+-- checks if the region is currently valid or not (unreachable from any of the sent regions)
+validRegion :: Region -> State -> Bool
+validRegion reg state = not $ any (\r -> reachable r reg state) (sentRegions state)
+ 
+-- adds the given region to the set of sent regions
+addToSent :: Region -> State -> State
+addToSent reg state = state { sentRegions = Set.insert reg (sentRegions state) }

@@ -3,6 +3,19 @@ module Checker where
 import qualified Data.Map as Map
 import State
 
+-- Program Representation
+
+data Expression = New Type
+                | VarAccess String
+                | FieldAccess String Int
+                | AssignVar String RefType Expression
+                | AssignField String Int Expression
+                | Seq Expression Expression
+                | Send String
+                | Receive Type deriving Show
+
+data Function = Function { funcParams :: [(String, Type)], funcBody :: Expression }
+
 -- Checking
 
 checkFunction :: Function -> StructInfo -> Bool
@@ -32,7 +45,8 @@ checkFunction (Function params body) si = distinctNames && noTracking && validBo
                 finalRegs <- mapM (\(n, _) -> fmap regionOf $ getVar n state) params
                 let retReg = regionOf value
                 let retReachable = any (\r -> reachable r retReg state || reachable retReg r state) initRegs
-                return (initRegs == finalRegs && not retReachable)
+                let validParamRegs = all (\r -> validRegion r state) initRegs
+                return (initRegs == finalRegs && not retReachable && validParamRegs && validRegion retReg state)
 
 getType :: Expression -> State -> Maybe (RefInfo, State)
 
@@ -44,7 +58,7 @@ getType (New t) s = do
 
 getType (VarAccess name) state = do
     varRef <- getVar name state
-    Just (varRef, state)
+    return (varRef, state)
 
 getType (FieldAccess name idx) state = do 
     varRef <- getVar name state
@@ -112,12 +126,27 @@ getType (AssignField name idx expr) state = do
     resultState <- if canSet fieldOldRef value
                 then replaceFieldReg (regionOf varInfo) (typeOf varInfo) idx (regionOf value) state
                 else Nothing
-    return (value, resultState)
+    if validRegion (regionOf value) resultState
+        then return (value, resultState)
+        else Nothing
 
 getType (Seq expr1 expr2) state = do
     -- just lose the value of the first expression
     (_, state) <- getType expr1 state
     getType expr2 state
+
+getType (Send name) state = do
+    value <- getVar name state
+    -- we can only send Iso terms
+    if refOf value == Iso
+        then return (value, addToSent (regionOf value) state)
+        else Nothing
+
+-- the same thing as constructing a new value
+getType (Receive t) s = do 
+    let (state, region) = allocRegion s
+    state' <- addStructToRegion region t state
+    return ((RefInfo Iso t region), state')
 
 --- Helper functions
 

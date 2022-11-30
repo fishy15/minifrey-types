@@ -153,6 +153,96 @@ noTrackingFields = checkFunction func si
           body = AssignVar "x" Iso (New (Type "A"))
           si   = Map.fromList [("A", [(Tracking, Type "B")])]
 
+-- Sending tests
+
+sendIso = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (Send "x") $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+useAfterSend = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (Send "x") $
+                 Seq (AssignVar "y" Iso (VarAccess "x")) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+returnAfterSend = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (Send "x") $
+                 Seq (AssignVar "y" Iso (VarAccess "x"))
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+sendParam = checkFunction func si
+    where func = Function [("x", Type "A")] body
+          body = Seq (Send "x") $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+sendRegular = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "y" Regular (FieldAccess "x" 0)) $
+                 Seq (Send "y") $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [(Regular, Type "B")]),
+                               ("B", [])]
+
+tryAccessReachable = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "y" Regular (FieldAccess "x" 0)) $
+                 Seq (Send "x") $
+                 Seq (AssignVar "z" Regular (VarAccess "y")) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [(Regular, Type "B")]),
+                               ("B", [])]
+
+tryAccessReachableIso = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "y" Iso (FieldAccess "x" 0)) $
+                 Seq (Send "x") $
+                 Seq (AssignVar "z" Tracking (VarAccess "y")) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [(Iso, Type "B")]),
+                               ("B", [])]
+
+tryFieldAccessSent = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (Send "x") $
+                 Seq (AssignVar "y" Tracking (FieldAccess "x" 0)) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [(Iso, Type "B")]),
+                               ("B", [])]
+
+tryAccessAlias = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "y" Tracking (VarAccess "x")) $
+                 Seq (Send "x") $
+                 Seq (AssignVar "x" Iso (VarAccess "y")) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [(Iso, Type "B")]),
+                               ("B", [])]
+
+-- Receiving tests
+
+receiveIso = checkFunction func si
+    where func = Function [] body
+          body = AssignVar "x" Iso (Receive (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+receiveRegular = checkFunction func si
+    where func = Function [] body
+          body = AssignVar "x" Regular (Receive (Type "A"))
+          si   = Map.fromList [("A", [])]
 
 tests :: [TestCase]
 tests = [
@@ -177,7 +267,18 @@ tests = [
     TestCase "Set an Iso Struct Field" setIsoField True,
     TestCase "Error on Assigning to Different Regular Regions" setRegularDiffRegion False,
     TestCase "Set on Assigning to the Same Regular Regions" setRegularSameRegion True,
-    TestCase "No Fields with Tracking" noTrackingFields False
+    TestCase "No Fields with Tracking" noTrackingFields False,
+    TestCase "Send an Iso Variable" sendIso True,
+    TestCase "Access a Variable after Sending" useAfterSend False,
+    TestCase "Return a Value after Sending" returnAfterSend False,
+    TestCase "Send a Parameter" sendParam False,
+    TestCase "Send a Regular Variable" sendRegular False,
+    TestCase "Try to Access Reachable Regular Field from Sent" tryAccessReachable False,
+    TestCase "Try to Access Reachable Iso Field from Sent" tryAccessReachableIso False,
+    TestCase "Try to Access Field of Sent" tryFieldAccessSent False,
+    TestCase "Try to Access Alias of Sent" tryAccessAlias False,
+    TestCase "Receive Iso" receiveIso True,
+    TestCase "Receive Regular" receiveRegular False
     ]
 
 main :: IO ()
