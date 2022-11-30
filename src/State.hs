@@ -4,9 +4,9 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 data RefType = Iso | Tracking | Regular deriving (Eq, Show)
-data Type = Type String deriving (Eq, Ord)
+data Type = Type String deriving (Eq, Ord, Show)
 
-data RefInfo = RefInfo { refOf :: RefType, typeOf :: Type, regionOf :: Region }
+data RefInfo = RefInfo { refOf :: RefType, typeOf :: Type, regionOf :: Region } deriving Show
 
 -- Expressions
 
@@ -15,16 +15,16 @@ data Expression = New Type
                 | FieldAccess String Int
                 | AssignVar String RefType Expression
                 | AssignField String Int Expression
-                | Seq Expression Expression
+                | Seq Expression Expression deriving Show
 
 data Function = Function { funcParams :: [(String, Type)], funcBody :: Expression }
 
 -- Regions
-newtype Region = Region Int deriving (Eq, Ord)
+newtype Region = Region Int deriving (Eq, Ord, Show)
 
 --- Type state
 
-type StructInfo = Map.Map String [(RefType, Type)] 
+type StructInfo = Map.Map String [(RefType, Type)]
 
 data State = State { 
     stateVars :: Map.Map String RefInfo,
@@ -33,7 +33,7 @@ data State = State {
     trackedRegions :: Set.Set Region,
     structInfo :: StructInfo,
     fieldRegs :: Map.Map (Region, Type) [Region]
-}
+} deriving Show
 
 emptyState :: StructInfo -> State
 emptyState si = State Map.empty 0 Set.empty Set.empty si Map.empty
