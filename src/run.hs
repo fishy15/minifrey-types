@@ -1,5 +1,6 @@
 import qualified Data.Map as Map
 import Checker
+import State
 
 data TestCase = TestCase String Bool Bool
 runTestCase :: TestCase -> IO ()
