@@ -177,14 +177,14 @@ sameRegParams = checkFunction func si
 sendIso = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
 useAfterSend = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                  Seq (AssignVar "y" Iso (AccessVar "x")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [])]
@@ -192,14 +192,14 @@ useAfterSend = checkFunction func si
 returnAfterSend = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                  Seq (AssignVar "y" Iso (AccessVar "x"))
                      (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
 sendParam = checkFunction func si
     where func = Function [("x", Type "A")] body
-          body = Seq (Send "x") $
+          body = Seq (Send (AccessVar "x")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
@@ -207,7 +207,7 @@ sendRegular = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
                  Seq (AssignVar "y" Regular (AccessField "x" 0)) $
-                 Seq (Send "y") $
+                 Seq (Send (AccessVar "y")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [(Regular, Type "B")]),
                                ("B", [])]
@@ -216,7 +216,7 @@ tryAccessReachable = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
                  Seq (AssignVar "y" Regular (AccessField "x" 0)) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                  Seq (AssignVar "z" Regular (AccessVar "y")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [(Regular, Type "B")]),
@@ -226,7 +226,7 @@ tryAccessReachableIso = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
                  Seq (AssignVar "y" Iso (AccessField "x" 0)) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                  Seq (AssignVar "z" Tracking (AccessVar "y")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [(Iso, Type "B")]),
@@ -235,7 +235,7 @@ tryAccessReachableIso = checkFunction func si
 tryAccessFieldSent = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                  Seq (AssignVar "y" Tracking (AccessField "x" 0)) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [(Iso, Type "B")]),
@@ -245,7 +245,7 @@ tryAccessAlias = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
                  Seq (AssignVar "y" Tracking (AccessVar "x")) $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
                  Seq (AssignVar "x" Iso (AccessVar "y")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [(Iso, Type "B")]),
@@ -254,8 +254,8 @@ tryAccessAlias = checkFunction func si
 sendTwice = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
-                 Seq (Send "x") $
-                 Seq (Send "x") $
+                 Seq (Send (AccessVar "x")) $
+                 Seq (Send (AccessVar "x")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [])]
 
@@ -263,7 +263,7 @@ sendField = checkFunction func si
     where func = Function [] body
           body = Seq (AssignVar "x" Iso (New (Type "A"))) $
                  Seq (AssignVar "y" Regular (AccessField "x" 0)) $
-                 Seq (Send "y") $
+                 Seq (Send (AccessVar "y")) $
                  Seq (AssignVar "x" Iso (AccessVar "x")) $
                      (New (Type "A"))
           si   = Map.fromList [("A", [(Regular, Type "B")]),

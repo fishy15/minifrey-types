@@ -12,7 +12,7 @@ data Expression = New Type
                 | AssignField String Int Expression
                 | Seq Expression Expression
                 | FuncCall [Expression] Type
-                | Send String
+                | Send Expression
                 | Receive Type deriving Show
 
 data Function = Function { funcParams :: [(String, Type)], funcBody :: Expression }
@@ -154,8 +154,8 @@ getType (FuncCall params retType) state = do
             let r = regionOf v
             return ((r:rs), s'')
 
-getType (Send name) state = do
-    value <- getVar name state
+getType (Send expr) state = do
+    (value, state) <- getType expr state
     return (value, addToSent (regionOf value) state)
 
 -- the same thing as constructing a new value
