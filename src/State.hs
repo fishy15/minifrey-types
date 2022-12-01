@@ -126,9 +126,18 @@ reachable a b s = a == b || any (\r -> reachable r b s) reachableFromA
     where structsInRegion = filter (\((r, _), _) -> r == a) $ Map.assocs $ fieldRegs s
           reachableFromA  = filter (/= a) $ concat $ map snd structsInRegion
 
+-- checks if one region is reachable from the other
+eitherReachable :: Region -> Region -> State -> Bool
+eitherReachable a b s = reachable a b s || reachable b a s
+
 -- checks if the region is currently valid or not (unreachable from any of the sent regions)
 validRegion :: Region -> State -> Bool
 validRegion reg state = not $ any (\r -> reachable r reg state) (sentRegions state)
+
+-- checks if the region can be sent (unreachable from any sent regions, cannot reach sent regions)
+sendable :: Region -> State -> Bool
+sendable reg state = not $ any (\r -> eitherReachable r reg state) invalidRegs
+    where invalidRegs = Set.elems (sentRegions state)
  
 -- adds the given region to the set of sent regions
 addToSent :: Region -> State -> State

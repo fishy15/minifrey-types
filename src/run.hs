@@ -269,6 +269,15 @@ sendField = checkFunction func si
           si   = Map.fromList [("A", [(Regular, Type "B")]),
                                ("B", [])]
 
+sendNotCompleteValid = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "y" Iso (AccessField "x" 0)) $
+                 Seq (Send (AccessVar "y")) $
+                     (Send (AccessVar "x"))
+          si   = Map.fromList [("A", [(Iso, Type "B")]),
+                               ("B", [])]
+
 -- Receiving tests
 
 receiveIso = checkFunction func si
@@ -280,6 +289,52 @@ receiveRegular = checkFunction func si
     where func = Function [] body
           body = AssignVar "x" Regular (Receive (Type "A"))
           si   = Map.fromList [("A", [])]
+
+-- larger example programs
+
+-- corresponds to the following program (examples/buildTree.txt):
+-- this should succeed
+-- buildTree() {
+--     root = new Tree;
+--     left = recv<Tree>();
+--     right = recv<Tree>();
+--     root.left = left;
+--     root.right = right;
+--     send(root)
+-- }
+
+buildTree = checkFunction func si
+    where func = Function [] body
+          body = Seq ((AssignVar "root" Iso (New (Type "Tree")))) $
+                 Seq ((AssignVar "left" Tracking (Receive (Type "Tree")))) $
+                 Seq ((AssignVar "right" Tracking (Receive (Type "Tree")))) $
+                 Seq ((AssignField "root" 0 (AccessVar "left"))) $
+                 Seq ((AssignField "root" 1 (AccessVar "right"))) $
+                     (Send (AccessVar "root"))
+          si   = Map.fromList [("Tree", [(Iso, Type "Tree"), (Iso, Type "Tree")])]
+
+-- corresponds to the following program (examples/findMinimumIncorrect.txt):
+-- this should fail
+-- buildAndFindMin() {
+--     root = new Tree;
+--     left = recv<Tree>();
+--     right = recv<Tree>();
+--     root.left = left;
+--     root.right = right;
+--     send(root);
+--     findMin(root.left)
+-- }
+
+buildAndFindMin = checkFunction func si
+    where func = Function [] body
+          body = Seq ((AssignVar "root" Iso (New (Type "Tree")))) $
+                 Seq ((AssignVar "left" Tracking (Receive (Type "Tree")))) $
+                 Seq ((AssignVar "right" Tracking (Receive (Type "Tree")))) $
+                 Seq ((AssignField "root" 0 (AccessVar "left"))) $
+                 Seq ((AssignField "root" 1 (AccessVar "right"))) $
+                 Seq (Send (AccessVar "root")) $
+                     (FuncCall [AccessField "root" 0] (Type "Tree"))
+          si   = Map.fromList [("Tree", [(Iso, Type "Tree"), (Iso, Type "Tree")])]
 
 tests :: [TestCase]
 tests = [
@@ -319,8 +374,11 @@ tests = [
     TestCase "Try to Access Alias of Sent" tryAccessAlias False,
     TestCase "Try Sending the Same Variable Twice" sendTwice False,
     TestCase "Send Field of an Iso Struct" sendField False,
+    TestCase "Send a Struct With Invalid Fields" sendNotCompleteValid False,
     TestCase "Receive Iso" receiveIso True,
-    TestCase "Receive Regular" receiveRegular False
+    TestCase "Receive Regular" receiveRegular False,
+    TestCase "Build Tree" buildTree True,
+    TestCase "Build and Find Min" buildAndFindMin False
     ]
 
 main :: IO ()

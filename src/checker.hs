@@ -21,7 +21,7 @@ data Function = Function { funcParams :: [(String, Type)], funcBody :: Expressio
 
 checkFunction :: Function -> StructInfo -> Bool
 
-checkFunction (Function params body) si = distinctNames && noTracking && validBody
+checkFunction (Function params body) si = noUnitStruct && distinctNames && noTracking && validBody
     where distinctNames = distinctNames' params
           distinctNames' :: [(String, Type)] -> Bool
           distinctNames' [] = True
@@ -31,7 +31,7 @@ checkFunction (Function params body) si = distinctNames && noTracking && validBo
           noTracking = all noTracking' $ Map.elems si
           noTracking' fields = null $ filter (\(rt, _) -> rt == Tracking) fields
 
-          initState = makeState params (emptyState si)
+          initState = makeState params (emptyState withUnit)
           makeState :: [(String, Type)] -> State -> State
           makeState [] s = s
           makeState ((name, t):ps) s = makeState ps (addVar name (RefInfo Iso t reg) s')
@@ -49,13 +49,13 @@ checkFunction (Function params body) si = distinctNames && noTracking && validBo
                 let validParamRegs = all (\r -> validRegion r state) initRegs
                 return (initRegs == finalRegs && not retReachable && validParamRegs && validRegion retReg state)
 
+          noUnitStruct = not $ Map.member "unit" si 
+          withUnit = Map.insert "unit" ([]) si
+
 getType :: Expression -> State -> Maybe (RefInfo, State)
 
 -- just gives Value to construct a value since types are not being checked
-getType (New t) s = do 
-    let (state, region) = allocRegion s
-    state' <- addStructToRegion region t state
-    return ((RefInfo Iso t region), state')
+getType (New t) s = allocNew t s
 
 getType (AccessVar name) state = do
     varRef <- getVar name state
@@ -141,11 +141,10 @@ getType (FuncCall params retType) state = do
     let (newState, newReg) = allocRegion state
     if mutualUnreachable paramRegions state
         -- the same as creating a new value
-        then return ((RefInfo Iso retType newReg), newState)
+        then allocNew retType state
         else Nothing
     where mutualUnreachable [] _ = True
-          mutualUnreachable (p:ps) s = not (any (eitherReach s p) ps) && mutualUnreachable ps s
-          eitherReach s x y = reachable x y s || reachable y x s
+          mutualUnreachable (p:ps) s = not (any (\r -> eitherReachable p r s) ps) && mutualUnreachable ps s
 
           compParams [] s = Just ([], s)
           compParams (p:ps) s = do
@@ -156,15 +155,23 @@ getType (FuncCall params retType) state = do
 
 getType (Send expr) state = do
     (value, state) <- getType expr state
-    return (value, addToSent (regionOf value) state)
+    let reg = regionOf value
+    let addedState = addToSent reg state
+    if sendable reg state
+        then allocNew unit addedState
+        else Nothing
+    where unit = Type "unit"
 
 -- the same thing as constructing a new value
-getType (Receive t) s = do 
+getType (Receive t) s = allocNew t s
+
+--- Helper functions
+
+allocNew :: Type -> State -> Maybe (RefInfo, State)
+allocNew t s = do
     let (state, region) = allocRegion s
     state' <- addStructToRegion region t state
     return ((RefInfo Iso t region), state')
-
---- Helper functions
 
 accessField :: [RefInfo] -> Int -> Maybe RefInfo
 accessField [] _ = Nothing
