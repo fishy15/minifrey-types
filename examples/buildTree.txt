@@ -1,0 +1,8 @@
+buildTree() {
+    root = new Tree;
+    left = recv<Tree>();
+    right = recv<Tree>();
+    root.left = left;
+    root.right = right;
+    send(root)
+}

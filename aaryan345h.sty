@@ -6,9 +6,11 @@
 \RequirePackage{amssymb}
 \RequirePackage{amsthm}
 \RequirePackage{fancyhdr}
+\RequirePackage{listings}
 \RequirePackage{mathdots}
 \RequirePackage{mathtools}
 \RequirePackage{parskip}
+\RequirePackage{xurl}
 \RequirePackage[margin=1in]{geometry}
 
 % for setting title
@@ -21,5 +23,13 @@
 \lhead{\@assgnauthor}
 \chead{\@assgnclass}
 \rhead{\@assgntitle}
+
+% program formatting
+% https://tex.stackexchange.com/questions/172702/how-can-i-make-lstlisting-look-exactly-like-verbatim
+\lstset{
+  basicstyle=\ttfamily,
+  columns=fullflexible,
+  keepspaces=true,
+}
 
 \endinput
