@@ -137,10 +137,7 @@ getType (Seq expr1 expr2) state = do
 
 getType (Send name) state = do
     value <- getVar name state
-    -- we can only send Iso terms
-    if refOf value == Iso
-        then return (value, addToSent (regionOf value) state)
-        else Nothing
+    return (value, addToSent (regionOf value) state)
 
 -- the same thing as constructing a new value
 getType (Receive t) s = do 

@@ -232,6 +232,24 @@ tryAccessAlias = checkFunction func si
           si   = Map.fromList [("A", [(Iso, Type "B")]),
                                ("B", [])]
 
+sendTwice = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (Send "x") $
+                 Seq (Send "x") $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [])]
+
+sendField = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                 Seq (AssignVar "y" Regular (AccessField "x" 0)) $
+                 Seq (Send "y") $
+                 Seq (AssignVar "x" Iso (AccessVar "x")) $
+                     (New (Type "A"))
+          si   = Map.fromList [("A", [(Regular, Type "B")]),
+                               ("B", [])]
+
 -- Receiving tests
 
 receiveIso = checkFunction func si
@@ -272,11 +290,13 @@ tests = [
     TestCase "Access a Variable after Sending" useAfterSend False,
     TestCase "Return a Value after Sending" returnAfterSend False,
     TestCase "Send a Parameter" sendParam False,
-    TestCase "Send a Regular Variable" sendRegular False,
+    TestCase "Send a Regular Variable" sendRegular True,
     TestCase "Try to Access Reachable Regular Field from Sent" tryAccessReachable False,
     TestCase "Try to Access Reachable Iso Field from Sent" tryAccessReachableIso False,
     TestCase "Try to Access Field of Sent" tryAccessFieldSent False,
     TestCase "Try to Access Alias of Sent" tryAccessAlias False,
+    TestCase "Try Sending the Same Variable Twice" sendTwice False,
+    TestCase "Send Field of an Iso Struct" sendField False,
     TestCase "Receive Iso" receiveIso True,
     TestCase "Receive Regular" receiveRegular False
     ]
