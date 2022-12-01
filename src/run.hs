@@ -153,6 +153,25 @@ noTrackingFields = checkFunction func si
           body = AssignVar "x" Iso (New (Type "A"))
           si   = Map.fromList [("A", [(Tracking, Type "B")])]
 
+-- Function call tests
+
+noParams = checkFunction func si
+    where func = Function [] body
+          body = FuncCall [] (Type "A")
+          si   = Map.fromList [("A", [])]
+
+twoParams = checkFunction func si
+    where func = Function [] body
+          body = FuncCall [New (Type "A"), New (Type "A")] (Type "A")
+          si   = Map.fromList [("A", [])]
+
+sameRegParams = checkFunction func si
+    where func = Function [] body
+          body = Seq (AssignVar "x" Iso (New (Type "A"))) $
+                     (FuncCall [(AccessField "x" 0), (AccessField "x" 1)]) (Type "A")
+          si   = Map.fromList [("A", [(Regular, Type "B"), (Regular, Type "B")]),
+                               ("B", [])]
+
 -- Sending tests
 
 sendIso = checkFunction func si
@@ -286,6 +305,9 @@ tests = [
     TestCase "Error on Assigning to Different Regular Regions" setRegularDiffRegion False,
     TestCase "Set on Assigning to the Same Regular Regions" setRegularSameRegion True,
     TestCase "No Fields with Tracking" noTrackingFields False,
+    TestCase "Call a Function with No Parameters" noParams True,
+    TestCase "Call a Function with Two Parameters" twoParams True,
+    TestCase "Call a Function with Two Parameters in the Same Region" sameRegParams False,
     TestCase "Send an Iso Variable" sendIso True,
     TestCase "Access a Variable after Sending" useAfterSend False,
     TestCase "Return a Value after Sending" returnAfterSend False,

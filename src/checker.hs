@@ -11,6 +11,7 @@ data Expression = New Type
                 | AssignVar String RefType Expression
                 | AssignField String Int Expression
                 | Seq Expression Expression
+                | FuncCall [Expression] Type
                 | Send String
                 | Receive Type deriving Show
 
@@ -134,6 +135,24 @@ getType (Seq expr1 expr2) state = do
     -- just lose the value of the first expression
     (_, state) <- getType expr1 state
     getType expr2 state
+
+getType (FuncCall params retType) state = do
+    (paramRegions, state) <- compParams params state
+    let (newState, newReg) = allocRegion state
+    if mutualUnreachable paramRegions state
+        -- the same as creating a new value
+        then return ((RefInfo Iso retType newReg), newState)
+        else Nothing
+    where mutualUnreachable [] _ = True
+          mutualUnreachable (p:ps) s = not (any (eitherReach s p) ps) && mutualUnreachable ps s
+          eitherReach s x y = reachable x y s || reachable y x s
+
+          compParams [] s = Just ([], s)
+          compParams (p:ps) s = do
+            (v, s') <- getType p s
+            (rs, s'') <- compParams ps s'
+            let r = regionOf v
+            return ((r:rs), s'')
 
 getType (Send name) state = do
     value <- getVar name state
